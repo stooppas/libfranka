@@ -18,12 +18,13 @@ using franka::Torques;
 
 using research_interface::robot::AutomaticErrorRecovery;
 using research_interface::robot::Connect;
-using research_interface::robot::GetRobotModel;
+using research_interface::robot::GetCartesianLimit;
 using research_interface::robot::LoadModelLibrary;
 using research_interface::robot::Move;
 using research_interface::robot::SetCartesianImpedance;
 using research_interface::robot::SetCollisionBehavior;
 using research_interface::robot::SetEEToK;
+using research_interface::robot::SetFilters;
 using research_interface::robot::SetGuidingMode;
 using research_interface::robot::SetJointImpedance;
 using research_interface::robot::SetLoad;
@@ -80,6 +81,13 @@ bool Command<Move>::compare(const Move::Request& request_one, const Move::Reques
 }
 
 template <>
+bool Command<GetCartesianLimit>::compare(const GetCartesianLimit::Request& request_one,
+                                         const GetCartesianLimit::Request& request_two) {
+  return request_one.id == request_two.id;
+}
+
+
+template <>
 bool Command<SetCollisionBehavior>::compare(const SetCollisionBehavior::Request& request_one,
                                             const SetCollisionBehavior::Request& request_two) {
   return request_one.lower_torque_thresholds_acceleration ==
@@ -127,6 +135,21 @@ bool Command<SetNEToEE>::compare(const SetNEToEE::Request& request_one,
   return request_one.NE_T_EE == request_two.NE_T_EE;
 }
 
+
+template <>
+bool Command<SetFilters>::compare(const SetFilters::Request& request_one,
+                                  const SetFilters::Request& request_two) {
+  return request_one.joint_position_filter_frequency ==
+             request_two.joint_position_filter_frequency &&
+         request_one.joint_velocity_filter_frequency ==
+             request_two.joint_velocity_filter_frequency &&
+         request_one.cartesian_position_filter_frequency ==
+             request_two.cartesian_position_filter_frequency &&
+         request_one.cartesian_velocity_filter_frequency ==
+             request_two.cartesian_velocity_filter_frequency &&
+         request_one.controller_filter_frequency == request_two.controller_filter_frequency;
+}
+
 template <>
 bool Command<SetLoad>::compare(const SetLoad::Request& request_one,
                                const SetLoad::Request& request_two) {
@@ -141,11 +164,6 @@ bool Command<AutomaticErrorRecovery>::compare(const AutomaticErrorRecovery::Requ
 }
 
 template <>
-bool Command<GetRobotModel>::compare(const GetRobotModel::Request&, const GetRobotModel::Request&) {
-  return true;
-}
-
-template <>
 bool Command<StopMove>::compare(const StopMove::Request&, const StopMove::Request&) {
   return true;
 }
@@ -155,6 +173,12 @@ Move::Request Command<Move>::getExpected() {
   return Move::Request(Move::ControllerMode::kJointImpedance,
                        Move::MotionGeneratorMode::kJointVelocity, Move::Deviation(1, 2, 3),
                        Move::Deviation(4, 5, 6));
+}
+
+template <>
+GetCartesianLimit::Request Command<GetCartesianLimit>::getExpected() {
+  int32_t limit_id = 3;
+  return GetCartesianLimit::Request(limit_id);
 }
 
 template <>
@@ -206,6 +230,11 @@ SetNEToEE::Request Command<SetNEToEE>::getExpected() {
 }
 
 template <>
+SetFilters::Request Command<SetFilters>::getExpected() {
+  return SetFilters::Request(1, 10, 100, 100, 1000);
+}
+
+template <>
 SetLoad::Request Command<SetLoad>::getExpected() {
   double m_load = 1.5;
   std::array<double, 3> F_x_Cload{0.01, 0.01, 0.1};
@@ -216,11 +245,6 @@ SetLoad::Request Command<SetLoad>::getExpected() {
 template <>
 AutomaticErrorRecovery::Request Command<AutomaticErrorRecovery>::getExpected() {
   return AutomaticErrorRecovery::Request();
-}
-
-template <>
-GetRobotModel::Request Command<GetRobotModel>::getExpected() {
-  return GetRobotModel::Request();
 }
 
 template <>
@@ -240,13 +264,15 @@ typename T::Response Command<T>::createResponse(const typename T::Request&,
 }
 
 template <>
-typename GetRobotModel::Response Command<GetRobotModel>::createResponse(
-    const typename GetRobotModel::Request&,
-    const typename GetRobotModel::Status status) {
-  return typename GetRobotModel::Response(status, kExpectedModelString);
+GetCartesianLimit::Response Command<GetCartesianLimit>::createResponse(
+    const GetCartesianLimit::Request&,
+    GetCartesianLimit::Status status) {
+  std::array<double, 3> object_world_size{2, 2, 2};
+  std::array<double, 16> object_frame{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+  return GetCartesianLimit::Response(status, object_world_size, object_frame, true);
 }
 
-using CommandTypes = ::testing::Types<GetRobotModel,
+using CommandTypes = ::testing::Types<GetCartesianLimit,
                                       SetCollisionBehavior,
                                       SetJointImpedance,
                                       SetCartesianImpedance,
@@ -254,6 +280,7 @@ using CommandTypes = ::testing::Types<GetRobotModel,
                                       SetEEToK,
                                       SetNEToEE,
                                       SetLoad,
+                                      SetFilters,
                                       Move,
                                       StopMove,
                                       AutomaticErrorRecovery>;
@@ -274,11 +301,7 @@ TYPED_TEST(Command, CanSendAndReceiveSuccess) {
           })
       .spinOnce();
 
-  if constexpr (std::is_same_v<typename TestFixture::TCommand, GetRobotModel>) {
-    EXPECT_NO_THROW((robot.executeCommand<GetRobotModel, franka::GetRobotModelResult>()));
-  } else {
     EXPECT_NO_THROW(TestFixture::executeCommand(robot));
-  }
 }
 
 TYPED_TEST(Command, CanSendAndReceiveRejected) {
@@ -296,12 +319,7 @@ TYPED_TEST(Command, CanSendAndReceiveRejected) {
           })
       .spinOnce();
 
-  if constexpr (std::is_same_v<typename TestFixture::TCommand, GetRobotModel>) {
-    EXPECT_THROW((robot.executeCommand<GetRobotModel, franka::GetRobotModelResult>()),
-                 CommandException);
-  } else {
     EXPECT_THROW(TestFixture::executeCommand(robot), CommandException);
-  }
 }
 
 TYPED_TEST(Command, ThrowsProtocolExceptionIfInvalidResponseReceived) {
@@ -319,12 +337,7 @@ TYPED_TEST(Command, ThrowsProtocolExceptionIfInvalidResponseReceived) {
           })
       .spinOnce();
 
-  if constexpr (std::is_same_v<typename TestFixture::TCommand, GetRobotModel>) {
-    EXPECT_THROW((robot.executeCommand<GetRobotModel, franka::GetRobotModelResult>()),
-                 ProtocolException);
-  } else {
     EXPECT_THROW(TestFixture::executeCommand(robot), ProtocolException);
-  }
 }
 
 INSTANTIATE_TEST_CASE_P(
@@ -333,8 +346,7 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Values(StopMove::Status::kCommandNotPossibleRejected,
                       StopMove::Status::kReflexAborted,
                       StopMove::Status::kEmergencyAborted,
-                      StopMove::Status::kAborted,
-                      StopMove::Status::kCommandRejectedDueToActivatedSafetyFunctions));
+                      StopMove::Status::kAborted));
 
 TEST_P(StopMoveCommand, CanReceiveErrorResponses) {
   RobotMockServer server;
@@ -427,8 +439,7 @@ INSTANTIATE_TEST_CASE_P(
         AutomaticErrorRecovery::Status::kReflexAborted,
         AutomaticErrorRecovery::Status::kEmergencyAborted,
         AutomaticErrorRecovery::Status::kManualErrorRecoveryRequiredRejected,
-        AutomaticErrorRecovery::Status::kAborted,
-        AutomaticErrorRecovery::Status::kCommandRejectedDueToActivatedSafetyFunctions));
+        AutomaticErrorRecovery::Status::kAborted));
 
 TEST_P(AutomaticErrorRecoveryCommand, CanReceiveErrorResponses) {
   RobotMockServer server;
@@ -457,6 +468,4 @@ INSTANTIATE_TEST_CASE_P(
                       Move::Status::kReflexAborted,
                       Move::Status::kEmergencyAborted,
                       Move::Status::kInputErrorAborted,
-                      Move::Status::kAborted,
-                      Move::Status::kCommandRejectedDueToActivatedSafetyFunctions,
-                      Move::Status::kPreemptedDueToActivatedSafetyFunctions));
+                      Move::Status::kAborted));

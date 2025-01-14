@@ -215,11 +215,8 @@ template <typename T>
 typename T::Request MockServer<C>::receiveRequest(Socket& tcp_socket,
                                                   typename T::Header* header_ptr) {
   typename T::template Message<typename T::Request> request_message;
-  if constexpr (std::is_same<research_interface::robot::GetRobotModel, T>::value) {
-    tcp_socket.receiveBytes(&request_message.header, sizeof(request_message.header));
-  } else {
-    tcp_socket.receiveBytes(&request_message, sizeof(request_message));
-  }
+  tcp_socket.receiveBytes(&request_message, sizeof(request_message));
+
   if (header_ptr != nullptr) {
     *header_ptr = request_message.header;
   }
@@ -235,6 +232,7 @@ void MockServer<C>::sendResponse(Socket& tcp_socket,
   tcp_socket.sendBytes(&response_message, sizeof(response_message));
 }
 
+/*
 template <>
 template <>
 inline void MockServer<RobotTypes>::sendResponse<research_interface::robot::GetRobotModel>(
@@ -247,6 +245,7 @@ inline void MockServer<RobotTypes>::sendResponse<research_interface::robot::GetR
   auto byte_vector = response_message.serialize();
   tcp_socket.sendBytes(byte_vector.data(), byte_vector.size());
 }
+*/
 
 template <typename C>
 template <typename T>

@@ -462,7 +462,7 @@ class Robot {
    *
    * @return std::string Provides the URDF model of the attached robot arm as json string
    */
-  auto getRobotModel() -> std::string;
+  //auto getRobotModel() -> std::string;
 
   /**
    * Changes the collision behavior.
